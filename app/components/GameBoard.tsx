@@ -49,8 +49,8 @@ export function GameBoard({
                 flex items-center justify-center 
                 transition-all duration-200 aspect-square
                 ${isBlackSquare ? "bg-slate-700 cursor-pointer hover:bg-slate-600" : "bg-green-200"}
-                ${isSelected ? "ring-2 ring-yellow-400" : ""}
-                ${canJump && piece?.color === currentPlayer ? "ring-2 ring-blue-400" : ""}
+                ${isSelected ? "ring-2 ring-yellow-400 rounded-lg" : ""}
+                ${canJump && piece?.color === currentPlayer ? "ring-2 ring-blue-400  rounded-lg" : ""}
               `}
             >
               {piece && (
@@ -58,17 +58,23 @@ export function GameBoard({
                   className={`
                     relative rounded-full transition-transform transform hover:scale-105
                     ${piece.color === "red" ? "bg-red-500" : "bg-gray-900"}
-                  `}
+                    transition-all duration-300 ease-in-out
+                    hover:scale-105
+                    animate-piece-appear
+                    `}
                   style={{
                     width: "80%",
                     height: "80%",
+                    animation: 'piece-move 0.3s ease-in-out'
                   }}
                 >
                   {piece.isKing && (
                     <Crown
                       className={`absolute top-[45%] left-1/2 -translate-x-1/2 -translate-y-1/2
                       w-5 h-5 sm:w-6 sm:h-6
-                      ${piece.color === "red" ? "text-red-800" : "text-gray-400"}`}
+                      ${piece.color === "red" ? "text-red-800" : "text-gray-400"}
+                      animate-crown-appear
+                      `}
                     />
                   )}
                 </div>

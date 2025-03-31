@@ -11,6 +11,9 @@ import { Card } from "@/components/ui/card";
 import { GameMode, GameVariant, Board, Position, CaptureMove } from "@/lib/types";
 import { initialBoard, getAvailableJumps, getAvailableMoves, makeMove } from "@/lib/game";
 
+const COMPUTER_MOVE_DELAY = 800; // Base delay for computer moves
+const CONSECUTIVE_MOVE_DELAY = 500; // Delay between consecutive moves in a sequence
+
 export default function Home() {
   const [board, setBoard] = useState<Board>(initialBoard());
   const [selectedPiece, setSelectedPiece] = useState<Position | null>(null);
@@ -79,6 +82,7 @@ export default function Home() {
     if (!gameVariant) return;
     
     setIsComputerThinking(true);
+    await new Promise(resolve => setTimeout(resolve, COMPUTER_MOVE_DELAY)); // Initial thinking delay
 
     const findJumpSequences = (
       startRow: number,
@@ -159,12 +163,9 @@ export default function Home() {
 
     for (let i = 0; i < bestMove.sequence.length; i++) {
       const move = bestMove.sequence[i];
+      await new Promise(resolve => setTimeout(resolve, i === 0 ? 0 : CONSECUTIVE_MOVE_DELAY));
       currentBoard = makeMove(move.from.row, move.from.col, move.to.row, move.to.col, currentBoard, gameVariant);
       setBoard(currentBoard);
-
-      if (i < bestMove.sequence.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 300));
-      }
     }
 
     setSelectedPiece(null);
@@ -350,7 +351,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex flex-col items-center justify-center p-4">
-      <Card className="p-8 bg-white/5 backdrop-blur-lg rounded-xl shadow-2xl">
+      <div className="p-8 bg-white/5 backdrop-blur-lg shadow-2xl">
         <GameHeader
           gameVariant={gameVariant}
           onNewGame={() => setShowNewGameDialog(true)}
@@ -385,7 +386,7 @@ export default function Home() {
           restartGame={restartGame}
           resetGame={resetGame}
         />
-      </Card>
+      </div>
     </div>
   );
 }
