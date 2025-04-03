@@ -7,51 +7,74 @@ import { GameStatus } from "./GameStatus";
 import { GameHeader } from "./GameHeader";
 import { GameDialogs } from "./GameDialogs";
 import { Card } from "@/components/ui/card";
-import { OnlineGame, Position } from "@/lib/types";
-import { supabase } from "@/lib/supabase";
-import { getAvailableJumps, makeMove } from "@/lib/game";
+import { OnlineGame as OnlineGameType, Position } from "@/lib/types";
+import { socket } from "@/lib/socket";
+import { getAvailableJumps, makeMove, getAvailableMoves } from "@/lib/game";
 
 interface OnlineGameProps {
   gameId: string;
   userId: string;
-  initialGame: OnlineGame;
+  initialGame: OnlineGameType;
 }
 
 export function OnlineGame({ gameId, userId, initialGame }: OnlineGameProps) {
   const router = useRouter();
-  const [game, setGame] = React.useState<OnlineGame>(initialGame);
+  const [game, setGame] = React.useState<OnlineGameType>(initialGame);
   const [selectedPiece, setSelectedPiece] = React.useState<Position | null>(null);
   const [showNewGameDialog, setShowNewGameDialog] = React.useState(false);
   const [showGameEndDialog, setShowGameEndDialog] = React.useState(false);
   const [multipleJumpInProgress, setMultipleJumpInProgress] = React.useState(false);
   const [mustJumpFrom, setMustJumpFrom] = React.useState<Position | null>(null);
+  const [isConnected, setIsConnected] = React.useState(false);
 
   const isMyTurn = (game.current_player === "red" && game.red_player === userId) ||
                   (game.current_player === "black" && game.black_player === userId);
 
   React.useEffect(() => {
-    const channel = supabase
-      .channel(`game_${gameId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'games',
-          filter: `id=eq.${gameId}`
-        },
-        (payload: any) => {
-          if (payload.new) {
-            setGame(payload.new as OnlineGame);
-          }
+    const setupSocket = () => {
+      socket.connect();
+
+      socket.on('connect', () => {
+        console.log('Connected to WebSocket');
+        setIsConnected(true);
+        
+        // Join the game room after connection
+        if (game.status === "waiting" && game.red_player !== userId) {
+          socket.emit('join_game', { game_id: gameId, player_id: userId });
         }
-      )
-      .subscribe();
+      });
+
+      socket.on('disconnect', () => {
+        console.log('Disconnected from WebSocket');
+        setIsConnected(false);
+      });
+
+      socket.on('game_updated', (updatedGame: OnlineGameType) => {
+        console.log('Game updated:', updatedGame);
+        if (updatedGame.id === gameId) {
+          setGame(updatedGame);
+          // Reset selection state when game updates
+          setSelectedPiece(null);
+          setMultipleJumpInProgress(false);
+          setMustJumpFrom(null);
+        }
+      });
+
+      socket.on('connect_error', (error) => {
+        console.error('Connection error:', error);
+      });
+    };
+
+    setupSocket();
 
     return () => {
-      supabase.removeChannel(channel);
+      socket.off('connect');
+      socket.off('disconnect');
+      socket.off('game_updated');
+      socket.off('connect_error');
+      socket.disconnect();
     };
-  }, [gameId]);
+  }, [gameId, userId, game.status, game.red_player]);
 
   React.useEffect(() => {
     if (game.winner) {
@@ -96,14 +119,34 @@ export function OnlineGame({ gameId, userId, initialGame }: OnlineGameProps) {
     return pieces;
   };
 
-  const handleSquareClick = async (row: number, col: number) => {
-    if (!isMyTurn || game.status !== "in_progress") return;
+  const isValidMove = (fromRow: number, fromCol: number, toRow: number, toCol: number): boolean => {
+    const piece = game.board[fromRow][fromCol];
+    if (!piece) return false;
+
+    const availableJumps = findAllJumps(game.current_player);
+    if (availableJumps.length > 0) {
+      // If jumps are available, only allow jump moves
+      const jumps = getAvailableJumps(fromRow, fromCol, game.board, game.game_variant);
+      return jumps.some(jump => jump.to.row === toRow && jump.to.col === toCol);
+    }
+
+    // If no jumps are available, check regular moves
+    const moves = getAvailableMoves(fromRow, fromCol, game.board, game.game_variant);
+    return moves.some(move => move.row === toRow && move.col === toCol);
+  };
+
+  const handleSquareClick = (row: number, col: number) => {
+    if (game.status !== "in_progress" ) {
+      return;
+    }
 
     const piece = game.board[row][col];
     const availableJumps = findAllJumps(game.current_player);
 
+    // Selecting a piece
     if (piece && piece.color === game.current_player && !selectedPiece) {
       if (availableJumps.length > 0) {
+        // If jumps are available, only allow selecting pieces that can jump
         const canJump = availableJumps.some(pos => pos.row === row && pos.col === col);
         if (!canJump) return;
       }
@@ -117,66 +160,8 @@ export function OnlineGame({ gameId, userId, initialGame }: OnlineGameProps) {
       return;
     }
 
+    // Moving a selected piece
     if (selectedPiece) {
-      const isValidMove = (fromRow: number, fromCol: number, toRow: number, toCol: number): boolean => {
-        const piece = game.board[fromRow][fromCol];
-        if (!piece) return false;
-      
-        const rowDiff = toRow - fromRow;
-        const colDiff = Math.abs(toCol - fromCol);
-      
-        const hasJumps = findAllJumps(game.current_player).length > 0;
-        if (hasJumps && colDiff !== 2) return false;
-      
-        if (multipleJumpInProgress && mustJumpFrom &&
-          (fromRow !== mustJumpFrom.row || fromCol !== mustJumpFrom.col)) {
-          return false;
-        }
-      
-        if (game.game_variant === "brazilian" && piece.isKing) {
-          if (Math.abs(rowDiff) !== Math.abs(colDiff)) return false;
-      
-          const rowDir = Math.sign(rowDiff);
-          const colDir = Math.sign(toCol - fromCol);
-          let currentRow = fromRow + rowDir;
-          let currentCol = fromCol + colDir;
-          let piecesInPath = 0;
-      
-          while (currentRow !== toRow && currentCol !== toCol) {
-            if (game.board[currentRow][currentCol]) piecesInPath++;
-            currentRow += rowDir;
-            currentCol += colDir;
-          }
-      
-          if (hasJumps && piecesInPath !== 1) return false;
-          if (!hasJumps && piecesInPath !== 0) return false;
-      
-          return true;
-        }
-      
-        if (colDiff !== 1 && colDiff !== 2) return false;
-      
-        if (!piece.isKing && game.game_variant !== "brazilian") {
-          if (piece.color === "red" && rowDiff >= 0) return false;
-          if (piece.color === "black" && rowDiff <= 0) return false;
-        } else if (!piece.isKing && game.game_variant === "brazilian") {
-          if (colDiff === 1) {
-            if (piece.color === "red" && rowDiff >= 0) return false;
-            if (piece.color === "black" && rowDiff <= 0) return false;
-          }
-        }
-      
-        if (colDiff === 2) {
-          const jumpedRow = fromRow + Math.sign(rowDiff);
-          const jumpedCol = fromCol + Math.sign(toCol - fromCol);
-          const jumpedPiece = game.board[jumpedRow][jumpedCol];
-      
-          if (!jumpedPiece || jumpedPiece.color === piece.color) return false;
-        }
-      
-        return true;
-      };
-
       if (isValidMove(selectedPiece.row, selectedPiece.col, row, col)) {
         const newBoard = makeMove(selectedPiece.row, selectedPiece.col, row, col, game.board, game.game_variant);
         
@@ -188,12 +173,10 @@ export function OnlineGame({ gameId, userId, initialGame }: OnlineGameProps) {
         if (jumped) {
           const additionalJumps = getAvailableJumps(row, col, newBoard, game.game_variant);
           if (additionalJumps.length > 0) {
-            await supabase
-              .from('games')
-              .update({
-                board: newBoard
-              })
-              .eq('id', gameId);
+            socket.emit('make_move', {
+              game_id: gameId,
+              board: newBoard
+            });
 
             setSelectedPiece({ row, col });
             setMustJumpFrom({ row, col });
@@ -209,15 +192,11 @@ export function OnlineGame({ gameId, userId, initialGame }: OnlineGameProps) {
           row.some(piece => piece && piece.color === "black")
         );
 
-        await supabase
-          .from('games')
-          .update({
-            board: newBoard,
-            current_player: game.current_player === "red" ? "black" : "red",
-            winner: !hasRedPieces ? "black" : !hasBlackPieces ? "red" : null,
-            status: (!hasRedPieces || !hasBlackPieces) ? "completed" : "in_progress"
-          })
-          .eq('id', gameId);
+        socket.emit('make_move', {
+          game_id: gameId,
+          board: newBoard,
+          winner: !hasRedPieces ? "black" : !hasBlackPieces ? "red" : null
+        });
 
         setSelectedPiece(null);
         setMustJumpFrom(null);
@@ -238,7 +217,7 @@ export function OnlineGame({ gameId, userId, initialGame }: OnlineGameProps) {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex flex-col items-center justify-center p-4">
-      <Card className="p-8 bg-white/5 backdrop-blur-lg rounded-xl shadow-2xl">
+      <div className="p-8 bg-white/5 backdrop-blur-lg  shadow-2xl">
         <GameHeader
           gameVariant={game.game_variant}
           onNewGame={() => setShowNewGameDialog(true)}
@@ -273,7 +252,7 @@ export function OnlineGame({ gameId, userId, initialGame }: OnlineGameProps) {
           restartGame={restartGame}
           resetGame={resetGame}
         />
-      </Card>
+      </div>
     </div>
   );
 }

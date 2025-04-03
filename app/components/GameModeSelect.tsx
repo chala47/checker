@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Monitor, Users } from "lucide-react";
+import { Monitor, Users, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { GameMode } from "@/lib/types";
@@ -33,7 +33,15 @@ export function GameModeSelect({ gameVariant, onSelectMode }: GameModeSelectProp
             className="flex items-center gap-2 text-lg py-6 hover:bg-white/10"
           >
             <Users className="w-6 h-6" />
-            Two Players
+            Local Two Players
+          </Button>
+          <Button
+            onClick={() => onSelectMode("online")}
+            variant="outline"
+            className="flex items-center gap-2 text-lg py-6 hover:bg-white/10"
+          >
+            <Globe className="w-6 h-6" />
+            Play Online
           </Button>
         </div>
       </Card>

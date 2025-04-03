@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { GameBoard } from "@/app/components/GameBoard";
 import { GameStatus } from "@/app/components/GameStatus";
 import { GameHeader } from "@/app/components/GameHeader";
 import { GameDialogs } from "@/app/components/GameDialogs";
 import { GameModeSelect } from "@/app/components/GameModeSelect";
 import { GameVariantSelect } from "@/app/components/GameVariantSelect";
+import { OnlineGameList } from "@/app/components/OnlineGameList";
 import { Card } from "@/components/ui/card";
 import { GameMode, GameVariant, Board, Position, CaptureMove } from "@/lib/types";
 import { initialBoard, getAvailableJumps, getAvailableMoves, makeMove } from "@/lib/game";
@@ -15,6 +17,7 @@ const COMPUTER_MOVE_DELAY = 800; // Base delay for computer moves
 const CONSECUTIVE_MOVE_DELAY = 500; // Delay between consecutive moves in a sequence
 
 export default function Home() {
+  const router = useRouter();
   const [board, setBoard] = useState<Board>(initialBoard());
   const [selectedPiece, setSelectedPiece] = useState<Position | null>(null);
   const [currentPlayer, setCurrentPlayer] = useState<"red" | "black">("red");
@@ -26,6 +29,9 @@ export default function Home() {
   const [isComputerThinking, setIsComputerThinking] = useState(false);
   const [showNewGameDialog, setShowNewGameDialog] = useState(false);
   const [showGameEndDialog, setShowGameEndDialog] = useState(false);
+
+  // Generate a random user ID (in a real app, this would come from authentication)
+  const userId = React.useMemo(() => Math.random().toString(36).substring(7), []);
 
   const findAllJumps = (color: "red" | "black", currentBoard: Board = board): Position[] => {
     const pieces: Position[] = [];
@@ -341,12 +347,20 @@ export default function Home() {
     setShowGameEndDialog(false);
   };
 
+  const handleGameModeSelect = (mode: GameMode) => {
+    if (mode === "online") {
+      router.push("/online");
+    } else {
+      setGameMode(mode);
+    }
+  };
+
   if (!gameVariant) {
     return <GameVariantSelect onSelectVariant={setGameVariant} />;
   }
 
   if (!gameMode) {
-    return <GameModeSelect gameVariant={gameVariant} onSelectMode={setGameMode} />;
+    return <GameModeSelect gameVariant={gameVariant} onSelectMode={handleGameModeSelect} />;
   }
 
   return (

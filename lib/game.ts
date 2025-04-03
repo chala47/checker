@@ -38,7 +38,6 @@ export const getAvailableJumps = (
   if (!piece) return [];
 
   const jumps: CaptureMove[] = [];
-  const directions = piece.isKing ? [-2, 2] : piece.color === "red" ? [-2] : [2];
 
   // For Brazilian kings, we need to check the entire diagonal
   if (gameVariant === "brazilian" && piece.isKing) {
@@ -79,6 +78,7 @@ export const getAvailableJumps = (
     });
   } else {
     // Normal pieces and normal kings
+    const directions = piece.isKing ? [-2, 2] : piece.color === "red" ? [-2] : [2];
     for (const rowDiff of directions) {
       for (const colDiff of [-2, 2]) {
         const newRow = row + rowDiff;
@@ -116,7 +116,6 @@ export const getAvailableMoves = (
   if (!piece) return [];
 
   const moves: Position[] = [];
-  const directions = piece.isKing ? [-1, 1] : piece.color === "red" ? [-1] : [1];
 
   if (gameVariant === "brazilian" && piece.isKing) {
     // Brazilian kings can move any number of squares diagonally
@@ -136,14 +135,20 @@ export const getAvailableMoves = (
       });
     });
   } else {
-    // Normal pieces and normal kings
+    // Normal pieces and normal kings can only move one square diagonally
+    const directions = piece.isKing ? [-1, 1] : piece.color === "red" ? [-1] : [1];
     for (const rowDiff of directions) {
       for (const colDiff of [-1, 1]) {
         const newRow = row + rowDiff;
         const newCol = col + colDiff;
 
         if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8 && !currentBoard[newRow][newCol]) {
-          moves.push({ row: newRow, col: newCol });
+          // For normal checkers, kings can only move one square at a time
+          if (gameVariant === "normal" && piece.isKing && Math.abs(newRow - row) === 1) {
+            moves.push({ row: newRow, col: newCol });
+          } else if (!piece.isKing) {
+            moves.push({ row: newRow, col: newCol });
+          }
         }
       }
     }

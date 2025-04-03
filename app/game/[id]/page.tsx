@@ -1,5 +1,3 @@
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
 import { OnlineGame } from "@/app/components/OnlineGame";
 import { redirect } from "next/navigation";
 
@@ -8,30 +6,20 @@ export default async function GamePage({
 }: {
   params: { id: string }
 }) {
-  const supabase = createServerComponentClient({ cookies });
+  // Generate a random user ID (in a real app, this would come from authentication)
+  const userId = Math.random().toString(36).substring(7);
   
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const response = await fetch(`http://localhost:5000/api/games/${id}`);
+  const game = await response.json();
 
-  if (!session) {
-    redirect('/');
-  }
-
-  const { data: game } = await supabase
-    .from('games')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (!game) {
+  if (!game || game.error) {
     redirect('/');
   }
 
   return (
     <OnlineGame
       gameId={id}
-      userId={session.user.id}
+      userId={userId}
       initialGame={game}
     />
   );

@@ -6,8 +6,7 @@ import { Users, Crown, SquareStack } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { OnlineGame, GameVariant } from "@/lib/types";
-import { supabase } from "@/lib/supabase";
-import { initialBoard } from "@/lib/game";
+import { socket } from "@/lib/socket";
 
 interface OnlineGameListProps {
   userId: string;
@@ -20,67 +19,47 @@ export function OnlineGameList({ userId }: OnlineGameListProps) {
   React.useEffect(() => {
     // Fetch available games
     const fetchGames = async () => {
-      const { data } = await supabase
-        .from('games')
-        .select('*')
-        .eq('status', 'waiting')
-        .order('created_at', { ascending: false });
-      
-      if (data) setGames(data as OnlineGame[]);
+      const response = await fetch('http://localhost:5000/api/games');
+      const data = await response.json();
+      setGames(data);
     };
 
     fetchGames();
 
-    // Subscribe to changes
-    const channel = supabase
-      .channel('games_channel')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'games'
-        },
-        () => fetchGames()
-      )
-      .subscribe();
+    // Connect to WebSocket
+    socket.connect();
+
+    // Listen for game updates
+    socket.on('game_updated', () => {
+      fetchGames();
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      socket.disconnect();
     };
   }, []);
 
   const createGame = async (variant: GameVariant) => {
-    const { data: game } = await supabase
-      .from('games')
-      .insert({
+    const response = await fetch('http://localhost:5000/api/find_match', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         game_variant: variant,
-        board: initialBoard(),
         red_player: userId,
-        status: 'waiting'
-      })
-      .select()
-      .single();
+      }),
+    });
 
+    const game = await response.json();
     if (game) {
       router.push(`/game/${game.id}`);
     }
   };
 
   const joinGame = async (gameId: string) => {
-    const { data: game } = await supabase
-      .from('games')
-      .update({
-        black_player: userId,
-        status: 'in_progress'
-      })
-      .eq('id', gameId)
-      .select()
-      .single();
-
-    if (game) {
-      router.push(`/game/${game.id}`);
-    }
+    // socket.emit('join_game', { game_id: gameId, player_id: userId });
+    router.push(`/game/${gameId}`);
   };
 
   return (
