@@ -7,19 +7,33 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { OnlineGame, GameVariant } from "@/lib/types";
 import { socket } from "@/lib/socket";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 interface OnlineGameListProps {
-  userId: string;
+  gameVariant: GameVariant;
 }
 
-export function OnlineGameList({ userId }: OnlineGameListProps) {
+export function OnlineGameList({ gameVariant }: OnlineGameListProps) {
   const router = useRouter();
   const [games, setGames] = React.useState<OnlineGame[]>([]);
-
+  const [showInviteDialog, setShowInviteDialog] = React.useState(false);
+  const [friendEmail, setFriendEmail] = React.useState("");
+  const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   React.useEffect(() => {
     // Fetch available games
     const fetchGames = async () => {
-      const response = await fetch('http://localhost:5000/api/games');
+      const response = await fetch(`http://localhost:5000/api/games?game_variant=${gameVariant}`, {
+        method: "GET",
+        credentials: "include", // 👈 THIS is important
+      });
       const data = await response.json();
       setGames(data);
     };
@@ -40,14 +54,14 @@ export function OnlineGameList({ userId }: OnlineGameListProps) {
   }, []);
 
   const createGame = async (variant: GameVariant) => {
-    const response = await fetch('http://localhost:5000/api/find_match', {
+    const response = await fetch('http://localhost:5000/api/games', {
       method: 'POST',
+      credentials: "include",
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        game_variant: variant,
-        red_player: userId,
+        game_variant: gameVariant,
       }),
     });
 
@@ -57,14 +71,41 @@ export function OnlineGameList({ userId }: OnlineGameListProps) {
     }
   };
 
+  const invite = async () => {
+    setErrorMessage(null); // Reset previous error
+
+    const response = await fetch("http://localhost:5000/api/invite", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        game_variant: gameVariant,
+        invite_email: friendEmail,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      setErrorMessage(data.error || "Something went wrong");
+      return;
+    }
+
+    router.push(`/game/${data.id}`);
+    setShowInviteDialog(false);
+    setFriendEmail("");
+  };
+
   const joinGame = async (gameId: string) => {
-    // socket.emit('join_game', { game_id: gameId, player_id: userId });
     router.push(`/game/${gameId}`);
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex flex-col items-center justify-center p-4">
       <Card className="p-8 bg-white/5 backdrop-blur-lg rounded-xl shadow-2xl w-full max-w-2xl">
+
         <div className="flex flex-col gap-8">
           <div>
             <h1 className="text-3xl font-bold text-white text-center mb-4">
@@ -72,21 +113,32 @@ export function OnlineGameList({ userId }: OnlineGameListProps) {
             </h1>
             <div className="flex gap-4 justify-center">
               <Button
-                onClick={() => createGame("normal")}
+                onClick={() => setShowInviteDialog(true)}
                 variant="outline"
                 className="flex items-center gap-2 text-lg py-6 hover:bg-white/10"
               >
                 <SquareStack className="w-6 h-6" />
-                Create Normal Game
+                Invite friend
               </Button>
-              <Button
-                onClick={() => createGame("brazilian")}
-                variant="outline"
-                className="flex items-center gap-2 text-lg py-6 hover:bg-white/10"
-              >
-                <Crown className="w-6 h-6" />
-                Create Brazilian Game
-              </Button>
+
+              {gameVariant === "normal" ?
+                <Button
+                  onClick={() => createGame("normal")}
+                  variant="outline"
+                  className="flex items-center gap-2 text-lg py-6 hover:bg-white/10"
+                >
+                  <SquareStack className="w-6 h-6" />
+                  Create Normal Game
+                </Button>
+                :
+                <Button
+                  onClick={() => createGame("brazilian")}
+                  variant="outline"
+                  className="flex items-center gap-2 text-lg py-6 hover:bg-white/10"
+                >
+                  <Crown className="w-6 h-6" />
+                  Create Brazilian Game
+                </Button>}
             </div>
           </div>
 
@@ -131,6 +183,32 @@ export function OnlineGameList({ userId }: OnlineGameListProps) {
           </div>
         </div>
       </Card>
+      <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
+        <DialogContent className="bg-white p-6 rounded-xl shadow-lg space-y-4">
+          <DialogHeader>
+            <DialogTitle>Invite a Friend</DialogTitle>
+            <DialogDescription>Enter your friend's email to start a game</DialogDescription>
+          </DialogHeader>
+
+          <Input
+            type="email"
+            placeholder="friend@example.com"
+            value={friendEmail}
+            onChange={(e) => setFriendEmail(e.target.value)}
+          />
+
+          {errorMessage && (
+            <p className="text-red-600 text-sm mt-1">{errorMessage}</p>
+          )}
+
+          <Button
+            onClick={invite}
+            className="w-full"
+          >
+            Send Invite
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

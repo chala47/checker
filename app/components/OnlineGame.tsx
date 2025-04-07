@@ -27,8 +27,10 @@ export function OnlineGame({ gameId, userId, initialGame }: OnlineGameProps) {
   const [mustJumpFrom, setMustJumpFrom] = React.useState<Position | null>(null);
   const [isConnected, setIsConnected] = React.useState(false);
 
-  const isMyTurn = (game.current_player === "red" && game.red_player === userId) ||
-                  (game.current_player === "black" && game.black_player === userId);
+  const isMyTurn =
+  (game.current_player === "red" && parseInt(game.red_player.id) === parseInt(userId)) ||
+  (game.current_player === "black" && parseInt(game.black_player.id) === parseInt(userId));
+
 
   React.useEffect(() => {
     const setupSocket = () => {
@@ -39,7 +41,7 @@ export function OnlineGame({ gameId, userId, initialGame }: OnlineGameProps) {
         setIsConnected(true);
         
         // Join the game room after connection
-        if (game.status === "waiting" && game.red_player !== userId) {
+        if (game.status === "waiting" && game.red_player.id !== userId) {
           socket.emit('join_game', { game_id: gameId, player_id: userId });
         }
       });
@@ -136,40 +138,44 @@ export function OnlineGame({ gameId, userId, initialGame }: OnlineGameProps) {
   };
 
   const handleSquareClick = (row: number, col: number) => {
-    if (game.status !== "in_progress" ) {
+    console.log("turn", isMyTurn, userId,game.black_player,game.red_player);
+    
+    // Ensure that the game is in progress and the user is connected, and it's their turn
+    if (!isMyTurn || game.status !== "in_progress" || !isConnected) {
       return;
     }
-
+  
     const piece = game.board[row][col];
-    const availableJumps = findAllJumps(game.current_player);
-
+  
     // Selecting a piece
     if (piece && piece.color === game.current_player && !selectedPiece) {
+      if (multipleJumpInProgress && mustJumpFrom && (row !== mustJumpFrom.row || col !== mustJumpFrom.col)) {
+        // If there are multiple jumps in progress, prevent selecting non-jumping pieces
+        return;
+      }
+  
+      // Check if any available jumps exist for this piece
+      const availableJumps = findAllJumps(game.current_player);
+  
       if (availableJumps.length > 0) {
-        // If jumps are available, only allow selecting pieces that can jump
+        // If jumps are available, allow selecting only pieces that can jump
         const canJump = availableJumps.some(pos => pos.row === row && pos.col === col);
         if (!canJump) return;
       }
-
-      if (multipleJumpInProgress && mustJumpFrom &&
-        (row !== mustJumpFrom.row || col !== mustJumpFrom.col)) {
-        return;
-      }
-
+  
+      // Allow selection if the piece belongs to the current player
       setSelectedPiece({ row, col });
       return;
     }
-
+  
     // Moving a selected piece
     if (selectedPiece) {
       if (isValidMove(selectedPiece.row, selectedPiece.col, row, col)) {
         const newBoard = makeMove(selectedPiece.row, selectedPiece.col, row, col, game.board, game.game_variant);
-        
+  
         const jumped = Math.abs(row - selectedPiece.row) === 2 ||
-          (game.game_variant === "brazilian" &&
-            game.board[selectedPiece.row][selectedPiece.col]?.isKing &&
-            Math.abs(row - selectedPiece.row) > 1);
-
+          (game.game_variant === "brazilian" && game.board[selectedPiece.row][selectedPiece.col]?.isKing && Math.abs(row - selectedPiece.row) > 1);
+  
         if (jumped) {
           const additionalJumps = getAvailableJumps(row, col, newBoard, game.game_variant);
           if (additionalJumps.length > 0) {
@@ -177,35 +183,32 @@ export function OnlineGame({ gameId, userId, initialGame }: OnlineGameProps) {
               game_id: gameId,
               board: newBoard
             });
-
+  
             setSelectedPiece({ row, col });
             setMustJumpFrom({ row, col });
             setMultipleJumpInProgress(true);
             return;
           }
         }
-
-        const hasRedPieces = newBoard.some(row =>
-          row.some(piece => piece && piece.color === "red")
-        );
-        const hasBlackPieces = newBoard.some(row =>
-          row.some(piece => piece && piece.color === "black")
-        );
-
+  
+        const hasRedPieces = newBoard.some(row => row.some(piece => piece && piece.color === "red"));
+        const hasBlackPieces = newBoard.some(row => row.some(piece => piece && piece.color === "black"));
+  
         socket.emit('make_move', {
           game_id: gameId,
           board: newBoard,
           winner: !hasRedPieces ? "black" : !hasBlackPieces ? "red" : null
         });
-
+  
         setSelectedPiece(null);
         setMustJumpFrom(null);
         setMultipleJumpInProgress(false);
       } else {
-        setSelectedPiece(null);
+        setSelectedPiece(null);  // Reset selection if move is invalid
       }
     }
   };
+  
 
   const resetGame = () => {
     router.push('/');
@@ -230,6 +233,8 @@ export function OnlineGame({ gameId, userId, initialGame }: OnlineGameProps) {
           findAllJumps={findAllJumps}
           multipleJumpInProgress={multipleJumpInProgress}
           onNewGame={() => setShowNewGameDialog(true)}
+          redPlayer={game.red_player}
+          blackPlayer={game.black_player}
         />
 
         <GameBoard

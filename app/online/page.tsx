@@ -1,10 +1,12 @@
 "use client";
 
 import { OnlineGameList } from "@/app/components/OnlineGameList";
+import { GameVariant } from "@/lib/types";
+import { useSearchParams } from "next/navigation";
 
 export default function OnlinePage() {
-  // Generate a random user ID (in a real app, this would come from authentication)
-  const userId = Math.random().toString(36).substring(7);
+  const searchParams = useSearchParams();
+  const variant = searchParams.get("game_variant") as GameVariant;
   
-  return <OnlineGameList userId={userId} />;
+  return <OnlineGameList gameVariant={variant} />;
 }

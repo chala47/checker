@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { OnlineGame } from "@/app/components/OnlineGame";
 import { redirect } from "next/navigation";
 
@@ -6,16 +7,26 @@ export default async function GamePage({
 }: {
   params: { id: string }
 }) {
-  // Generate a random user ID (in a real app, this would come from authentication)
-  const userId = Math.random().toString(36).substring(7);
-  
-  const response = await fetch(`http://localhost:5000/api/games/${id}`);
-  const game = await response.json();
+  const cookieStore = cookies();
+  const cookieString = cookieStore
+    .getAll()
+    .map((c) => `${c.name}=${c.value}`)
+    .join("; ");
 
-  if (!game || game.error) {
-    redirect('/');
+  const response = await fetch(`http://localhost:5000/api/games/${id}`, {
+    method: "GET",
+    headers: {
+      Cookie: cookieString, // 🔥 this is key!
+    },
+  });
+
+  if (!response.ok) {
+    console.error("Failed to fetch game:", await response.text());
+    redirect("/");
   }
 
+  const game = await response.json();
+  const userId = game.user_id; 
   return (
     <OnlineGame
       gameId={id}

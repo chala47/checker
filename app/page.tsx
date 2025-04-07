@@ -86,7 +86,7 @@ export default function Home() {
 
   const computerMove = async () => {
     if (!gameVariant) return;
-    
+
     setIsComputerThinking(true);
     await new Promise(resolve => setTimeout(resolve, COMPUTER_MOVE_DELAY)); // Initial thinking delay
 
@@ -200,7 +200,7 @@ export default function Home() {
 
   const isValidMove = (fromRow: number, fromCol: number, toRow: number, toCol: number): boolean => {
     if (!gameVariant) return false;
-    
+
     const piece = board[fromRow][fromCol];
     if (!piece) return false;
 
@@ -349,7 +349,7 @@ export default function Home() {
 
   const handleGameModeSelect = (mode: GameMode) => {
     if (mode === "online") {
-      router.push("/online");
+      router.push(`/online?game_variant=${gameVariant}`);
     } else {
       setGameMode(mode);
     }
